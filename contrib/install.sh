@@ -18,8 +18,30 @@ apt-get update -qq
 apt-get install -y -qq tor git python3-venv curl zstd ca-certificates >/dev/null
 systemctl disable --now tor >/dev/null 2>&1 || true      # the Unseenet session starts its own Tor
 
-command -v ollama >/dev/null || curl -fsSL https://ollama.com/install.sh | sh
+if ! command -v ollama >/dev/null; then
+  # not ollama's install.sh: in an LXC on a host with a GPU it tries to install
+  # NVIDIA drivers and kernel headers, which fails - Emkay runs on the CPU
+  curl -fsSL https://ollama.com/download/ollama-linux-amd64.tar.zst | tar --zstd -x -C /usr
+  id ollama >/dev/null 2>&1 || useradd -r -s /bin/false -U -m -d /usr/share/ollama ollama
+  cat > /etc/systemd/system/ollama.service <<EOF
+[Unit]
+Description=Ollama
+After=network-online.target
+
+[Service]
+ExecStart=/usr/bin/ollama serve
+User=ollama
+Group=ollama
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+fi
 systemctl enable --now ollama
+for i in $(seq 1 30); do ollama list >/dev/null 2>&1 && break; sleep 1; done
 ollama pull "$MODEL"
 
 id emkay >/dev/null 2>&1 || useradd -m -s /bin/bash emkay
