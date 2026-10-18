@@ -9,7 +9,10 @@
 # ovos-solver-openai-plugin. Running it again updates OVOS and keeps the config.
 set -euo pipefail
 
-CHANNEL="${CHANNEL:-testing}"               # ovos-releases constraints: stable, testing or alpha
+# ovos-releases constraints: stable, testing or alpha. Alpha: ovos-core 2.1 (testing)
+# can load a slow skill twice at start-up (no lock around load_plugin_skills), so
+# it answers twice; newer cores have the lock.
+CHANNEL="${CHANNEL:-alpha}"
 MODEL="${MODEL:-emkay-qwen}"
 HOME_DIR=/home/emkay
 VENV=$HOME_DIR/ovos
@@ -24,7 +27,7 @@ SKILLS=(
 )
 PLUGINS=(
   "ovos-core[plugins,lgpl]" ovos-messagebus ovos-persona ovos-openai-plugin
-  ovos-ddg-solver-plugin ovos-wikipedia-plugin ovos-solver-failure-plugin
+  ovos-ddg-plugin ovos-wikipedia-plugin ovos-solver-failure-plugin
 )
 
 apt-get install -y -qq python3-venv python3-dev build-essential swig libfann-dev git >/dev/null
