@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from collections import Counter
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ class Repos:
     owner: str = "unseenet"
     token: str = ""
     exclude: set[str] = field(default_factory=set)
+    full_docs: set[str] = field(default_factory=set)     # repos whose every .md file is read
 
     def _get(self, url: str) -> bytes:
         req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
@@ -64,6 +66,20 @@ class Repos:
             return raw[:MAX_FILE].decode("utf-8", "replace")
         return ""
 
+    def docs(self, name: str, branch: str) -> dict[str, str]:
+        tree = json.loads(self._get(f"{API}/repos/{self.owner}/{name}/git/trees/{branch}?recursive=1"))
+        out = {}
+        for item in tree.get("tree", []):
+            p = item["path"]
+            if item["type"] != "blob" or not p.endswith(".md") or item.get("size", 0) > MAX_FILE \
+                    or set(p.split("/")) & {"node_modules", "tests", "test", ".github", "site"}:
+                continue
+            try:
+                out[p] = self._get(f"{RAW}/{self.owner}/{name}/{branch}/{urllib.parse.quote(p)}").decode("utf-8", "replace")
+            except (urllib.error.HTTPError, OSError):
+                continue
+        return out
+
     def sync(self, log=print) -> dict:
         out = {"synced": time.time(), "owner": self.owner, "repos": []}
         for r in self.repos():
@@ -72,7 +88,8 @@ class Repos:
                 "name": name, "description": r.get("description") or "",
                 "topics": r.get("topics") or [], "language": r.get("language") or "",
                 "archived": bool(r.get("archived")), "url": r["html_url"],
-                "readme": self.readme(name, r.get("default_branch") or "main")})
+                "readme": self.readme(name, r.get("default_branch") or "main"),
+                "docs": self.docs(name, r.get("default_branch") or "main") if name in self.full_docs else {}})
         log(f"repos: {len(out['repos'])} repositories of {self.owner}")
         return out
 
@@ -93,8 +110,11 @@ def chunks(cache: dict) -> list[Chunk]:
                   kind="repo", repo=name)
         c.terms = Counter(tokens(f"{name} {name} {' '.join(bits)} {' '.join(bits)}"))
         out.append(c)
-        if r.get("readme"):
+        docs = r.get("docs") or {}
+        if r.get("readme") and not any(k.lower() == "readme.md" for k in docs):
             out.extend(chunk_text(r["readme"], f"{name}/README.md", url, repo=name))
+        for path, text in docs.items():
+            out.extend(chunk_text(text, f"{name}/{path}", f"{url}/blob/HEAD/{path}", repo=name))
     return out
 
 

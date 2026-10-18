@@ -48,6 +48,9 @@ GROUPS = {
 }
 
 
+DOCS_REPOS = ["unseenet/unseenet", "OpenVoiceOS/ovos-technical-manual"]
+
+
 @dataclass
 class Config:
     vault: Path
@@ -85,6 +88,8 @@ def load_config(path: str | Path) -> Config:
                             api_key=os.environ.get(m["api_key_env"], "") if m.get("api_key_env") else "",
                             timeout=float(m.get("timeout", 600))),
             repos=[repos.Repos(owner=o, exclude=set(g.get("exclude", [])),
+                               full_docs={r.split("/", 1)[1] for r in g.get("docs_repos", DOCS_REPOS)
+                                          if r.split("/", 1)[0] == o},
                                token=os.environ.get(g["token_env"], "") if g.get("token_env") else "")
                    for o in g.get("owners", ["unseenet", "OpenVoiceOS"])] if g.get("enabled", True) else [],
             repos_cache=Path(g.get("cache_file", "~/.local/state/emkay/repos.json")).expanduser(),

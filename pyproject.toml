@@ -15,6 +15,7 @@ dependencies = [
     "ovos-wikipedia-plugin>=1.0.0a1",
     "ovos-ddg-solver-plugin",
     "padacioso",
+    "pint",
 ]
 
 [project.scripts]

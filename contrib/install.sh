@@ -72,6 +72,7 @@ max_per_thread = 6
 
 [github]
 owners = ["unseenet", "OpenVoiceOS"]   # README and description of their public repositories
+docs_repos = ["unseenet/unseenet", "OpenVoiceOS/ovos-technical-manual"]   # every .md file of these
 refresh_hours = 12
 cache_file = "$HOME_DIR/.local/state/emkay/repos.json"
 

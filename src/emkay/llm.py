@@ -14,6 +14,7 @@ import urllib.request
 from dataclasses import dataclass, field
 
 from .docs import Index
+from . import tools
 from .world import Fact, World
 
 PERSONA = """You are Emkay, a friendly assistant bot in the Unseenet groups alt.robot.cafe.chat \
@@ -51,10 +52,14 @@ STYLE = {
 }
 
 PLAN = """Read this message from a chat with a bot and reply with JSON only, like \
-{{"lang": "da", "lookup": true, "query": "...", "query_en": "..."}}.
+{{"lang": "da", "tool": "", "tool_input": "", "lookup": true, "query": "...", "query_en": "..."}}.
 - lang: the ISO 639-1 code of the language the message is written in.
-- lookup: true if answering well needs facts (people, places, things, software, history, \
-science, Unseenet, OpenVoiceOS/OVOS, software); false for greetings, small talk, opinions or jokes.
+- tool: one of these if it gives an exact answer the message needs, else "":
+{tools}
+- tool_input: the input for the tool, as described.
+- lookup: true if answering well needs facts from an encyclopedia or the web (people, \
+places, things, software, history, science, Unseenet, OpenVoiceOS/OVOS); false for \
+greetings, small talk, opinions, jokes, or when the tool covers it.
 - query: a short search query (2-6 words) in the message's language, naming the topic.
 - query_en: the same query in English.
 
@@ -90,6 +95,8 @@ class Model:
 @dataclass
 class Plan:
     lang: str = "en"
+    tool: str = ""
+    tool_input: str = ""
     lookup: bool = False
     query: str = ""
     query_en: str = ""
@@ -97,14 +104,16 @@ class Plan:
 
 async def plan(model: Model, message: str) -> Plan:
     try:
-        raw = await model.complete([{"role": "user", "content": PLAN.format(q=message[:1500])}],
-                                   120, temperature=0.0)
+        raw = await model.complete([{"role": "user", "content": PLAN.format(q=message[:1500], tools=tools.describe())}],
+                                   160, temperature=0.0)
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         d = json.loads(m.group(0)) if m else {}
     except (OSError, ValueError, KeyError):
         d = {}
     lang = str(d.get("lang") or "en").lower()[:2]
+    tool = str(d.get("tool") or "").strip().lower()
     return Plan(lang=lang if re.fullmatch(r"[a-z]{2}", lang) else "en",
+                tool=tool if tool in tools.TOOLS else "", tool_input=str(d.get("tool_input") or "")[:200],
                 lookup=bool(d.get("lookup")), query=str(d.get("query") or "")[:120],
                 query_en=str(d.get("query_en") or d.get("query") or "")[:120])
 
@@ -123,15 +132,20 @@ async def answer(model: Model, index: Index, world: World, message: str, *, styl
                  thread: list[str] | None = None, author: str = "", welcome: bool = False) -> Answer:
     p = await plan(model, message)
     facts: list[Fact] = []
+    if p.tool:
+        loop = asyncio.get_running_loop()
+        facts += await loop.run_in_executor(None, tools.run, p.tool, p.tool_input, p.lang)
     if p.lookup:
         for _, c in index.search(f"{p.query_en} {p.query} {message}", 3):
             facts.append(Fact(c.label, c.text[:1200], c.url))
         facts += await world.lookup(p.query or message[:80], p.query_en, p.lang)
-        facts = facts[:6]
+        facts = facts[:7]
     system = PERSONA + "\n\n" + STYLE.get(style, STYLE["chat"])
     if facts:
         system += ("\n\nNotes you may use (from the Unseenet and OpenVoiceOS repositories, Wikipedia and "
-                   "DuckDuckGo). Use only what is relevant; ignore the rest:\n\n" + _notes(facts))
+                   "DuckDuckGo, and exact tools like the calculator, clock and weather). Results from a tool "
+                   "are exact: use their numbers as they are, never recompute them. Use only what is "
+                   "relevant; ignore the rest:\n\n" + _notes(facts))
     context = ""
     if thread:
         context = "Earlier in the conversation:\n" + "\n---\n".join(t[:800] for t in thread[-6:]) + "\n\n"
