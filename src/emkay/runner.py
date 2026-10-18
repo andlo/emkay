@@ -46,6 +46,7 @@ GROUPS = {
                  description="Longer discussions, Usenet style. Emkay quotes what he answers.\n\n" + BLURB,
                  view="threads", kinds=["post"]),
 }
+PROFILE_LANGS = ["en", "da", "de", "sv", "nb", "nl", "fr", "es"]   # a profile lists at most 8
 WELCOME = {
     "da": "Velkommen til caféen, {name}! ☕", "en": "Welcome to the café, {name}! ☕",
     "de": "Willkommen im Café, {name}! ☕", "sv": "Välkommen till kaféet, {name}! ☕",
@@ -146,7 +147,7 @@ async def cmd_describe(cfg: Config) -> None:
             spec = GROUPS[style]
             await s.update_group(gid, title=spec["title"], description=spec["description"])
             print(f"updated {gid}")
-        await s.publish_profile(make_profile(about=ABOUT, lang=list(WELCOME), bot=True))
+        await s.publish_profile(make_profile(about=ABOUT, lang=PROFILE_LANGS, bot=True))
         print("updated the profile")
     finally:
         await s.close()
@@ -157,7 +158,7 @@ async def publish_profile(s: Session, log=print) -> None:
         return
     from unseenet.core.profiles import make_profile
     try:
-        await s.publish_profile(make_profile(about=ABOUT, lang=list(WELCOME), bot=True))
+        await s.publish_profile(make_profile(about=ABOUT, lang=PROFILE_LANGS, bot=True))
     except (SessionError, OSError, ConnectionError) as exc:
         log(f"could not publish the profile yet: {exc}")
         return
