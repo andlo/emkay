@@ -1,4 +1,4 @@
-"""What Emkay knows about Andreas's own work: the README and description of
+"""What Emkay knows about Unseenet and OpenVoiceOS: the README and description of
 every public, non-fork repository of a GitHub user (or organisation).
 
 Only the repository list goes through the GitHub API (a few requests); the
@@ -26,7 +26,7 @@ MAX_FILE = 200_000
 
 @dataclass
 class Repos:
-    owner: str = "andlo"
+    owner: str = "unseenet"
     token: str = ""
     exclude: set[str] = field(default_factory=set)
 

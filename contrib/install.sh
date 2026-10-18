@@ -71,7 +71,7 @@ max_per_day = 200
 max_per_thread = 6
 
 [github]
-owner = "andlo"
+owners = ["unseenet", "OpenVoiceOS"]   # README and description of their public repositories
 refresh_hours = 12
 cache_file = "$HOME_DIR/.local/state/emkay/repos.json"
 

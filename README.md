@@ -8,8 +8,9 @@ Usenet-style discussions.
 
 The name is "MK" said out loud - a nod to Mycroft's Mark I and Mark II. Emkay runs
 on [OpenVoiceOS](https://openvoiceos.org): he looks things up with the OVOS
-Wikipedia and DuckDuckGo plugins, knows the READMEs of
-[andlo's repositories](https://github.com/andlo), and talks through a small local
+Wikipedia and DuckDuckGo plugins, knows the READMEs of the
+[Unseenet](https://github.com/unseenet) and [OpenVoiceOS](https://github.com/OpenVoiceOS)
+repositories, and talks through a small local
 model (Ollama). He answers when named ("Emkay", "@emkay") and otherwise chimes in
 when a line or a new thread has been quiet for a bit. He welcomes people the first
 time they write.

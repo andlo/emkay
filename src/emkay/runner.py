@@ -1,7 +1,7 @@
 """Run Emkay.
 
     emkay -c emkay.toml init        # vault, key, profile and the two café groups
-    emkay -c emkay.toml sync        # fetch Andreas's repositories from GitHub
+    emkay -c emkay.toml sync        # fetch the Unseenet and OpenVoiceOS repositories
     emkay -c emkay.toml ask "Hvad er OVOS?"     # try him locally, no Unseenet
     emkay -c emkay.toml run         # sit in the café
 
@@ -57,7 +57,7 @@ class Config:
     poll: float = 30.0
     rules: bot.Rules = field(default_factory=bot.Rules)
     model: llm.Model = field(default_factory=llm.Model)
-    repos: repos.Repos | None = None
+    repos: list = field(default_factory=list)
     repos_cache: Path = Path("~/.local/state/emkay/repos.json").expanduser()
     repos_hours: float = 12.0
     wikipedia: bool = True
@@ -84,9 +84,9 @@ def load_config(path: str | Path) -> Config:
                             model=m.get("model", llm.Model.model),
                             api_key=os.environ.get(m["api_key_env"], "") if m.get("api_key_env") else "",
                             timeout=float(m.get("timeout", 600))),
-            repos=repos.Repos(owner=g.get("owner", "andlo"), exclude=set(g.get("exclude", [])),
-                              token=os.environ.get(g["token_env"], "") if g.get("token_env") else "")
-                  if g.get("enabled", True) else None,
+            repos=[repos.Repos(owner=o, exclude=set(g.get("exclude", [])),
+                               token=os.environ.get(g["token_env"], "") if g.get("token_env") else "")
+                   for o in g.get("owners", ["unseenet", "OpenVoiceOS"])] if g.get("enabled", True) else [],
             repos_cache=Path(g.get("cache_file", "~/.local/state/emkay/repos.json")).expanduser(),
             repos_hours=float(g.get("refresh_hours", 12)),
             wikipedia=bool(w.get("wikipedia", True)), duckduckgo=bool(w.get("duckduckgo", True)))
@@ -102,22 +102,27 @@ def open_session(cfg: Config, log=print) -> Session:
 
 
 def build_index(cfg: Config) -> Index:
-    return Index(repos.chunks(repos.load_cache(cfg.repos_cache)) if cfg.repos else [])
+    cache = repos.load_cache(cfg.repos_cache)
+    return Index([c for o in cache.get("owners", {}).values() for c in repos.chunks(o)])
 
 
 async def sync_repos(cfg: Config, force: bool = False, log=print) -> None:
-    if cfg.repos is None:
+    if not cfg.repos:
         return
     cache = repos.load_cache(cfg.repos_cache)
     if not force and datetime.now(timezone.utc).timestamp() - cache.get("synced", 0) < cfg.repos_hours * 3600:
         return
-    try:
-        fresh = await asyncio.get_running_loop().run_in_executor(None, cfg.repos.sync, log)
-    except (OSError, ValueError, KeyError) as exc:
-        log(f"repos: could not sync: {exc}")
-        return
-    if fresh["repos"]:
-        repos.save_cache(cfg.repos_cache, fresh)
+    owners = dict(cache.get("owners", {}))
+    for r in cfg.repos:
+        try:
+            fresh = await asyncio.get_running_loop().run_in_executor(None, r.sync, log)
+        except (OSError, ValueError, KeyError) as exc:
+            log(f"repos: could not sync {r.owner}: {exc}")
+            continue
+        if fresh["repos"]:
+            owners[r.owner] = fresh
+    owners = {o: v for o, v in owners.items() if o in {r.owner for r in cfg.repos}}
+    repos.save_cache(cfg.repos_cache, {"synced": datetime.now(timezone.utc).timestamp(), "owners": owners})
 
 
 def groups(s: Session) -> dict[str, str]:
@@ -280,7 +285,7 @@ async def cmd_run(cfg: Config, once: bool, dry_run: bool) -> None:
     world = World(cfg.wikipedia, cfg.duckduckgo)
     await sync_repos(cfg)
     index, built = build_index(cfg), datetime.now(timezone.utc)
-    print(f"{len(index.chunks)} sections from {cfg.repos.owner if cfg.repos else 'no'} repositories; "
+    print(f"{len(index.chunks)} sections from {', '.join(r.owner for r in cfg.repos) or 'no'} repositories; "
           f"sitting in {', '.join(groups(s).values())}")
     try:
         if not dry_run:

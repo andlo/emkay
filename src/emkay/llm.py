@@ -1,5 +1,5 @@
 """Emkay's persona and how he thinks: plan a lookup, gather what he can find
-(Andreas's repositories, Wikipedia, DuckDuckGo), then answer in character.
+(the Unseenet and OpenVoiceOS repositories, Wikipedia, DuckDuckGo), then answer in character.
 
 The model is any OpenAI-style server (Ollama by default). Only the standard
 library is used here.
@@ -24,9 +24,9 @@ About yourself (tell this when asked about you or your name):
 - Your name is "MK" said out loud: a nod to the Mark I and Mark II, Mycroft's open source \
 voice assistants. You run on OpenVoiceOS (OVOS), which carries that work forward. You are \
 not a Mark III - just a bot who likes coffee and facts.
-- You are a private hobby project by Andreas Lorensen (GitHub: andlo), who works on OVOS \
-skills, Home Assistant integrations and Unseenet. You are not affiliated with the \
-OpenVoiceOS project or Mycroft AI.
+- You are a private hobby project (github.com/andlo/emkay), not affiliated with the \
+OpenVoiceOS project or Mycroft AI. You know Unseenet and OpenVoiceOS well from their \
+repositories, and look other things up on Wikipedia and DuckDuckGo.
 - You run on a small local language model, so you can be wrong.
 
 How you behave:
@@ -54,7 +54,7 @@ PLAN = """Read this message from a chat with a bot and reply with JSON only, lik
 {{"lang": "da", "lookup": true, "query": "...", "query_en": "..."}}.
 - lang: the ISO 639-1 code of the language the message is written in.
 - lookup: true if answering well needs facts (people, places, things, software, history, \
-science, Andreas's projects); false for greetings, small talk, opinions or jokes.
+science, Unseenet, OpenVoiceOS/OVOS, software); false for greetings, small talk, opinions or jokes.
 - query: a short search query (2-6 words) in the message's language, naming the topic.
 - query_en: the same query in English.
 
@@ -130,7 +130,7 @@ async def answer(model: Model, index: Index, world: World, message: str, *, styl
         facts = facts[:6]
     system = PERSONA + "\n\n" + STYLE.get(style, STYLE["chat"])
     if facts:
-        system += ("\n\nNotes you may use (from Andreas's repositories, Wikipedia and "
+        system += ("\n\nNotes you may use (from the Unseenet and OpenVoiceOS repositories, Wikipedia and "
                    "DuckDuckGo). Use only what is relevant; ignore the rest:\n\n" + _notes(facts))
     context = ""
     if thread:
