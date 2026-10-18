@@ -203,6 +203,9 @@ async def bot_keys(s: Session, keys: set[str]) -> set[str]:
     return out
 
 
+LAST_LANG: dict[str, str] = {}      # OVOS session -> the language last spoken there
+
+
 def session_id(style: str, gid: str, msg) -> str:
     """One OVOS session per thread (talk) or per group (chat)."""
     root = msg.thread_root if style == "talk" else gid
@@ -232,10 +235,11 @@ async def look_once(s: Session, cfg: Config, state: bot.State,
         for t in bot.select(gid, msgs, style=style, me=me, mine=s.my_message_ids(),
                             rules=rules, state=state, now=now):
             text = bot.strip_name(bot.message_of(t.msg), cfg.rules.name)
-            lang = detect_lang(text, cfg.default_lang)
+            sid = session_id(style, gid, t.msg)
+            lang = LAST_LANG[sid] = detect_lang(text, LAST_LANG.get(sid, cfg.default_lang))
             log(f"{style} {t.why} ({lang}): {t.msg.message_id} {text[:60]!r}")
             try:
-                said = await cfg.ovos.ask(text, lang, session_id(style, gid, t.msg))
+                said = await cfg.ovos.ask(text, lang, sid)
             except (OSError, ConnectionError) as exc:
                 log(f"  OVOS did not answer: {exc}")
                 break
