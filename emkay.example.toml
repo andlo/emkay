@@ -1,0 +1,29 @@
+# Copy to emkay.toml. The vault's passphrase comes from UNSEENET_VAULT_PASSPHRASE.
+# The café groups (alt.robot.cafe.chat and .talk) are made by `emkay init`
+# and owned by Emkay's key.
+
+[bot]
+vault = "~/.config/emkay/emkay.vault"
+state_file = "~/.local/state/emkay/state.json"
+name = "Emkay (bot)"
+# nodes = ["xyz.onion"]          # default: Unseenet's list of known nodes
+poll_seconds = 30
+chat_quiet_seconds = 90          # chime in on a chat line nobody answered
+talk_quiet_minutes = 10          # reply to a new thread after this long
+max_per_hour = 30
+max_per_day = 200
+max_per_thread = 6
+
+[github]
+owner = "andlo"                  # his public, non-fork repositories: README and description
+refresh_hours = 12
+cache_file = "~/.local/state/emkay/repos.json"
+
+[world]
+wikipedia = true                 # ovos-wikipedia-plugin
+duckduckgo = true                # ovos-ddg-solver-plugin
+
+[model]
+base_url = "http://127.0.0.1:11434/v1"
+model = "qwen2.5:7b"
+timeout = 600
