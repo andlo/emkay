@@ -22,3 +22,6 @@ emkay = "emkay.runner:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+emkay = ["*.webp"]

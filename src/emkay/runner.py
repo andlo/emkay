@@ -172,6 +172,24 @@ async def publish_profile(s: Session, log=print) -> None:
     s.data["emkay_profile"] = True
     s.save()
     log("published the profile with the bot mark")
+    await publish_face(s, log)
+
+
+async def publish_face(s: Session, log=print) -> None:
+    """His profile picture: a Mark I face (UN-RFC 0022, section 8)."""
+    if s.data.get("emkay_picture"):
+        return
+    from importlib.resources import files
+    from unseenet.core.profiles import make_picture
+    data = files("emkay").joinpath("emkay-profile.webp").read_bytes()
+    try:
+        await s.publish_picture(make_picture(data, "image/webp", 160, alt="Emkay, a Mark I face"))
+    except Exception as exc:                      # noqa: BLE001 - nodes without avatar groups
+        log(f"could not publish the picture yet: {exc}")
+        return
+    s.data["emkay_picture"] = True
+    s.save()
+    log("published the profile picture")
 
 
 async def cmd_ask(cfg: Config, question: str, style: str) -> None:
@@ -267,6 +285,7 @@ async def cmd_run(cfg: Config, once: bool, dry_run: bool) -> None:
     try:
         if not dry_run:
             await publish_profile(s)
+            await publish_face(s)
         while True:
             if datetime.now(timezone.utc) - built > timedelta(hours=1):
                 await sync_repos(cfg)
