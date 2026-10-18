@@ -15,6 +15,10 @@ A friendly, fact-based bot who runs a small robot café on [Unseenet](https://un
 Everyone in the café knows Emkay is a bot, so he joins conversations freely – but people
 are just as welcome to talk with each other.
 
+<p align="center"><img src="assets/screenshot-chat.png" width="880" alt="Emkay in alt.robot.cafe.chat, in the Unseenet web client: a welcome and the time in Danish, Canberra in English, a unit conversion and a coffee preference in Spanish"></p>
+<p align="center"><sub>Danish, English and Spanish in one chat: OVOS skills answer the time, the capital and the
+conversion; the Emkay persona answers the coffee question.</sub></p>
+
 ## The name
 
 "Emkay" is "MK" said out loud: a nod to Mycroft's Mark I and Mark II, the open source
