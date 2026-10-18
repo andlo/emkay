@@ -9,12 +9,11 @@
 # ovos-solver-openai-plugin. Running it again updates OVOS and keeps the config.
 set -euo pipefail
 
-# ovos-releases constraints: stable, testing or alpha. Testing is what most OVOS
-# users run; see UPSTREAM.md for what alpha currently breaks.
-CHANNEL="${CHANNEL:-testing}"
+# ovos-releases constraints: alpha (default, where OVOS is heading) or testing
+CHANNEL="${CHANNEL:-alpha}"
 MODEL="${MODEL:-emkay-qwen}"
 HOME_DIR=/home/emkay
-VENV=$HOME_DIR/ovos
+VENV="${VENV:-$HOME_DIR/ovos}"
 CONSTRAINTS="https://raw.githubusercontent.com/OpenVoiceOS/ovos-releases/main/constraints-$CHANNEL.txt"
 
 SKILLS=(
@@ -24,9 +23,14 @@ SKILLS=(
   ovos-skill-calculator ovos-skill-geometry ovos-skill-geography  # exact things
   ovos-skill-convert ovos-skill-holidays
 )
+if [ "$CHANNEL" = alpha ]; then
+  CORE="ovos-core[plugins]"; DDG=ovos-ddg-plugin; LLM=ovos-chat-openai-plugin
+else
+  CORE="ovos-core[plugins,lgpl]"; DDG=ovos-ddg-solver-plugin; LLM=ovos-solver-openai-plugin
+fi
 PLUGINS=(
-  "ovos-core[plugins,lgpl]" ovos-messagebus ovos-persona ovos-openai-plugin
-  ovos-ddg-solver-plugin ovos-wikipedia-plugin ovos-solver-failure-plugin
+  "$CORE" ovos-messagebus ovos-persona ovos-openai-plugin
+  $DDG ovos-wikipedia-plugin ovos-solver-failure-plugin
 )
 
 apt-get install -y -qq python3-venv python3-dev build-essential swig libfann-dev git >/dev/null
@@ -40,6 +44,12 @@ curl -fsSL "$CONSTRAINTS" -o $VENV/constraints.txt
 # andlo's own skills are not in the release constraints yet - install them without
 sed -i -E '/^ovos-skill-(calculator|geometry|geography|convert|holidays)[<>=]/d' $VENV/constraints.txt
 $VENV/bin/pip install -q --upgrade ${PLUGINS[*]} ${SKILLS[*]} -c $VENV/constraints.txt
+# ovos-persona 0.9.0a28 splits its intent files on newlines, so the final newline
+# becomes an empty sample that ovos-spec-tools now rejects and the persona pipeline
+# does not load; fixed on dev (OpenVoiceOS/ovos-persona#234), not yet released
+if [ "$CHANNEL" = alpha ] && $VENV/bin/pip show ovos-persona 2>/dev/null | grep -qx "Version: 0.9.0a28"; then
+  $VENV/bin/pip install -q --no-deps --force-reinstall "git+https://github.com/OpenVoiceOS/ovos-persona.git@dev"
+fi
 EOF
 
 # --- configuration (kept on re-runs) ------------------------------------------
@@ -80,8 +90,8 @@ if [ ! -f "$PERSONA" ]; then
   sudo -u emkay tee "$PERSONA" >/dev/null <<EOF
 {
   "name": "Emkay",
-  "solvers": ["ovos-solver-openai-plugin", "ovos-solver-failure-plugin"],
-  "ovos-solver-openai-plugin": {
+  "solvers": ["$LLM", "ovos-solver-failure-plugin"],
+  "$LLM": {
     "api_url": "http://127.0.0.1:11434/v1",
     "key": "ollama",
     "model": "$MODEL",
@@ -102,9 +112,13 @@ LOCKED="$(dirname "$0")/ovos-core-locked.py"
   curl -fsSL https://raw.githubusercontent.com/andlo/emkay/main/contrib/ovos-core-locked.py -o $LOCKED; }
 install -o emkay -m 644 "$LOCKED" $VENV/ovos-core-locked.py
 
+# the LLM plugin's name differs between channels; keep an existing persona in step
+sed -i "s/ovos-solver-openai-plugin\|ovos-chat-openai-plugin/$LLM/g" "$PERSONA"
+
 # --- services -------------------------------------------------------------------
 for svc in messagebus core; do
-  bin=$([ $svc = messagebus ] && echo "$VENV/bin/ovos-messagebus" || echo "$VENV/bin/python $VENV/ovos-core-locked.py")
+  bin=$([ $svc = messagebus ] && echo "$VENV/bin/ovos-messagebus" || \
+        { [ "$CHANNEL" = alpha ] && echo "$VENV/bin/ovos-core" || echo "$VENV/bin/python $VENV/ovos-core-locked.py"; })
   cat > /etc/systemd/system/emkay-ovos-$svc.service <<EOF
 [Unit]
 Description=Emkay's OpenVoiceOS $svc
