@@ -21,21 +21,31 @@ are just as welcome to talk with each other.
 voice assistants whose work [OpenVoiceOS](https://openvoiceos.org) carries on. No, he
 is not a Mark III – just a bot who likes coffee and facts.
 
-## What he knows
+## How he works
 
-- **Unseenet and OpenVoiceOS** – the README of every public repository of both GitHub
-  organisations, plus all of the Unseenet docs and specs and the
-  [OVOS technical manual](https://github.com/OpenVoiceOS/ovos-technical-manual).
-- **The world** – Wikipedia and DuckDuckGo through the OVOS
-  [Wikipedia](https://github.com/OpenVoiceOS/ovos-wikipedia-plugin) and
-  [DuckDuckGo](https://github.com/OpenVoiceOS/ovos-ddg-solver-plugin) plugins.
-- **Exact things a small model gets wrong** – a calculator (also for geometry), unit
-  conversion, the clock and week number anywhere, public holidays, weather
-  (Open-Meteo), places and distances (OpenStreetMap), what happened on this day
-  (Wikipedia), word meanings (Wiktionary), scientific papers (arXiv) and dad jokes.
+Emkay **is** an OpenVoiceOS assistant – a stock, headless OVOS (messagebus and
+ovos-core, no audio) – with the Unseenet café as his mouth and ears instead of a
+microphone and a speaker:
 
-He thinks with a small language model running locally (Ollama, Qwen 2.5 7B), replies
-in the language you write in, and says so when he isn't sure.
+```
+café message ─► Emkay bridge ─► OVOS messagebus ─► ovos-core
+                                                    ├─ skills: date-time, weather, wikipedia,
+                                                    │  calculator, geometry, geography, convert,
+                                                    │  holidays, jokes, days in history, …
+                                                    └─ ovos-persona "Emkay" (when no skill answers):
+                                                       a local LLM through ovos-solver-openai-plugin
+café reply  ◄─ Emkay bridge ◄─ "speak" ◄────────────┘
+```
+
+- **Skills first.** What a skill can answer, it answers – exact time, sums, conversions,
+  weather, capitals. The [Emkay persona](contrib/install-ovos.sh) (ovos-persona with
+  Qwen 2.5 7B on Ollama, all local) takes the rest: chit-chat, opinions, explanations.
+- **The bridge** ([`src/emkay`](src/emkay)) only decides when he speaks, gives every thread
+  its own OVOS session (so the persona remembers the conversation), tells the language
+  of a message offline ([Lingua](https://github.com/pemistahl/lingua-py)), welcomes
+  newcomers and quotes in the discussion group.
+- **Languages:** English, Danish, German, Swedish, Norwegian, Dutch, French, Spanish,
+  Italian and Portuguese – as far as each skill is translated; the persona speaks them all.
 
 ## How he behaves
 
@@ -45,12 +55,17 @@ in the language you write in, and says so when he isn't sure.
 - Welcomes people the first time they write.
 - Never answers himself or other bots, and has limits per hour, per day and per thread.
 
+## Back to OVOS
+
+Running OVOS behind a chat shakes out things a voice setup rarely hits. Fixes go back
+upstream – see [UPSTREAM.md](UPSTREAM.md).
+
 ## Running him
 
 ```sh
-sudo bash contrib/install.sh               # on a Debian/Ubuntu LXC: everything, as a service
-emkay -c emkay.toml ask "Hvad er OVOS?"    # try him without Unseenet
-journalctl -u emkay -f
+sudo bash contrib/install.sh                  # Debian/Ubuntu LXC: Ollama, OVOS, the bridge
+emkay -c emkay.toml ask "Hvad er klokken?"    # ask his OVOS, without Unseenet
+journalctl -u emkay -u emkay-ovos-core -f
 ```
 
 See [`emkay.example.toml`](emkay.example.toml) for the knobs.
