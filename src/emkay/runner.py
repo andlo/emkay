@@ -183,7 +183,7 @@ async def publish_face(s: Session, log=print) -> None:
     from unseenet.core.profiles import make_picture
     data = files("emkay").joinpath("emkay-profile.webp").read_bytes()
     try:
-        await s.publish_picture(make_picture(data, "image/webp", 160, alt="Emkay, a Mark I face"))
+        await s.publish_picture(make_picture(data, "image/webp", 128, alt="Emkay, a Mark I face"))
     except Exception as exc:                      # noqa: BLE001 - nodes without avatar groups
         log(f"could not publish the picture yet: {exc}")
         return
