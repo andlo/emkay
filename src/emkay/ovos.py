@@ -41,13 +41,17 @@ def detect_lang(text: str, default: str = "en") -> str:
     except Exception as exc:                          # noqa: BLE001
         log.warning("language detection: %s", exc)
         return default
-    if not conf or len(text.split()) < 2 and conf[0].value < 0.5:
-        return default                               # "hej" alone could be anything
-    scores = {c.language.iso_code_639_1.name.lower(): c.value for c in conf}
-    best = max(scores, key=scores.get)
-    # Danish and Norwegian are close cousins; Emkay lives in Denmark, so a near tie is Danish
-    if best == "nb" and scores.get("da", 0) >= scores["nb"] * 0.6:
-        best = "da"
+    if not conf:
+        return default
+    ranked = [(c.language.iso_code_639_1.name.lower(), c.value) for c in conf]
+    (best, top), (second, runner_up) = ranked[0], ranked[1] if len(ranked) > 1 else ("", 0.0)
+    # Danish and Norwegian are close cousins; Emkay lives in Denmark, so when
+    # they are the two best guesses, it is Danish
+    if {best, second} == {"da", "nb"}:
+        return "da"
+    # short lines ("hej", "Tell me a joke") are guesses: keep the conversation's language
+    if top < 0.3 or top - runner_up < 0.05:
+        return default
     return best if best in LANGS else default
 
 
