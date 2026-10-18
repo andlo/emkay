@@ -1,11 +1,12 @@
-"""Run Emkay.
+"""Run Emkay: an OpenVoiceOS assistant sitting in the Unseenet robot café.
 
     emkay -c emkay.toml init        # vault, key, profile and the two café groups
-    emkay -c emkay.toml sync        # fetch the Unseenet and OpenVoiceOS repositories
-    emkay -c emkay.toml ask "Hvad er OVOS?"     # try him locally, no Unseenet
+    emkay -c emkay.toml ask "Hvad er klokken?"    # ask his OVOS, without Unseenet
     emkay -c emkay.toml run         # sit in the café
 
-The vault's passphrase is read from UNSEENET_VAULT_PASSPHRASE.
+The vault's passphrase is read from UNSEENET_VAULT_PASSPHRASE. OVOS (messagebus
+and ovos-core with skills and the Emkay persona) must be running - see
+contrib/install-ovos.sh.
 """
 
 from __future__ import annotations
@@ -23,18 +24,18 @@ from pathlib import Path
 from unseenet.client.session import Session, SessionError
 from unseenet.core.vault import Vault
 
-from . import bot, llm, repos
-from .docs import Index
-from .world import World
+from . import bot
+from .ovos import Ovos, detect_lang
 
 PASS_ENV = "UNSEENET_VAULT_PASSPHRASE"
 ABOUT = ("I'm Emkay - \"MK\" said out loud, a nod to Mycroft's Mark I and Mark II. A friendly, "
-         "fact-based bot running on OpenVoiceOS (OVOS), living in alt.robot.cafe.chat and "
-         "alt.robot.cafe.talk. A private hobby project by andlo, not affiliated with the "
+         "fact-based OpenVoiceOS (OVOS) assistant living in alt.robot.cafe.chat and "
+         "alt.robot.cafe.talk: OVOS skills answer what they can, and a small local language "
+         "model the rest. A private hobby project by andlo, not affiliated with the "
          "OpenVoiceOS project or Mycroft AI. I can be wrong.")
 BLURB = ("Emkay is a bot and joins conversations freely; humans are welcome to talk with each "
-         "other too. Emkay runs on OpenVoiceOS (OVOS). The name is \"MK\" said out loud, a nod "
-         "to Mycroft's Mark I and Mark II, the open source voice assistants whose work OVOS "
+         "other too. Emkay is an OpenVoiceOS (OVOS) assistant. The name is \"MK\" said out loud, "
+         "a nod to Mycroft's Mark I and Mark II, the open source voice assistants whose work OVOS "
          "carries on.\n\nA private hobby project, not affiliated with the OpenVoiceOS project "
          "or Mycroft AI.")
 GROUPS = {
@@ -42,13 +43,16 @@ GROUPS = {
                  description="Quick chat with Emkay, a friendly, fact-based assistant bot.\n\n" + BLURB,
                  view="chat", kinds=["chat"]),
     "talk": dict(name="alt.robot.cafe.talk", title="Robot café: talk",
-                 description="Longer discussions, Usenet style. Emkay quotes and cites "
-                             "sources.\n\n" + BLURB,
+                 description="Longer discussions, Usenet style. Emkay quotes what he answers.\n\n" + BLURB,
                  view="threads", kinds=["post"]),
 }
-
-
-DOCS_REPOS = ["unseenet/unseenet", "OpenVoiceOS/ovos-technical-manual"]
+WELCOME = {
+    "da": "Velkommen til caféen, {name}! ☕", "en": "Welcome to the café, {name}! ☕",
+    "de": "Willkommen im Café, {name}! ☕", "sv": "Välkommen till kaféet, {name}! ☕",
+    "nb": "Velkommen til kafeen, {name}! ☕", "nl": "Welkom in het café, {name}! ☕",
+    "fr": "Bienvenue au café, {name} ! ☕", "es": "¡Bienvenido al café, {name}! ☕",
+    "it": "Benvenuto al caffè, {name}! ☕", "pt": "Bem-vindo ao café, {name}! ☕",
+}
 
 
 @dataclass
@@ -59,18 +63,14 @@ class Config:
     nodes: list[str] = field(default_factory=list)
     poll: float = 30.0
     rules: bot.Rules = field(default_factory=bot.Rules)
-    model: llm.Model = field(default_factory=llm.Model)
-    repos: list = field(default_factory=list)
-    repos_cache: Path = Path("~/.local/state/emkay/repos.json").expanduser()
-    repos_hours: float = 12.0
-    wikipedia: bool = True
-    duckduckgo: bool = True
+    ovos: Ovos = field(default_factory=Ovos)
+    default_lang: str = "en"
 
 
 def load_config(path: str | Path) -> Config:
     path = Path(path).expanduser()
     d = tomllib.loads(path.read_text())
-    b, m, g, w = d.get("bot", {}), d.get("model", {}), d.get("github", {}), d.get("world", {})
+    b, o = d.get("bot", {}), d.get("ovos", {})
     try:
         return Config(
             vault=Path(b["vault"]).expanduser(),
@@ -83,18 +83,9 @@ def load_config(path: str | Path) -> Config:
                             max_per_day=int(b.get("max_per_day", 200)),
                             max_per_thread=int(b.get("max_per_thread", 6)),
                             ignore_keys=set(b.get("ignore_keys", []))),
-            model=llm.Model(base_url=m.get("base_url", llm.Model.base_url),
-                            model=m.get("model", llm.Model.model),
-                            api_key=os.environ.get(m["api_key_env"], "") if m.get("api_key_env") else "",
-                            timeout=float(m.get("timeout", 600))),
-            repos=[repos.Repos(owner=o, exclude=set(g.get("exclude", [])),
-                               full_docs={r.split("/", 1)[1] for r in g.get("docs_repos", DOCS_REPOS)
-                                          if r.split("/", 1)[0] == o},
-                               token=os.environ.get(g["token_env"], "") if g.get("token_env") else "")
-                   for o in g.get("owners", ["unseenet", "OpenVoiceOS"])] if g.get("enabled", True) else [],
-            repos_cache=Path(g.get("cache_file", "~/.local/state/emkay/repos.json")).expanduser(),
-            repos_hours=float(g.get("refresh_hours", 12)),
-            wikipedia=bool(w.get("wikipedia", True)), duckduckgo=bool(w.get("duckduckgo", True)))
+            ovos=Ovos(host=o.get("host", "127.0.0.1"), port=int(o.get("port", 8181)),
+                      timeout=float(o.get("timeout", 240))),
+            default_lang=o.get("default_lang", "en"))
     except KeyError as exc:
         raise SystemExit(f"{path}: missing {exc}") from exc
 
@@ -104,30 +95,6 @@ def open_session(cfg: Config, log=print) -> Session:
     if not pw:
         raise SystemExit(f"set {PASS_ENV} to the vault's passphrase")
     return Session(Vault.open(cfg.vault, pw), status=log)
-
-
-def build_index(cfg: Config) -> Index:
-    cache = repos.load_cache(cfg.repos_cache)
-    return Index([c for o in cache.get("owners", {}).values() for c in repos.chunks(o)])
-
-
-async def sync_repos(cfg: Config, force: bool = False, log=print) -> None:
-    if not cfg.repos:
-        return
-    cache = repos.load_cache(cfg.repos_cache)
-    if not force and datetime.now(timezone.utc).timestamp() - cache.get("synced", 0) < cfg.repos_hours * 3600:
-        return
-    owners = dict(cache.get("owners", {}))
-    for r in cfg.repos:
-        try:
-            fresh = await asyncio.get_running_loop().run_in_executor(None, r.sync, log)
-        except (OSError, ValueError, KeyError) as exc:
-            log(f"repos: could not sync {r.owner}: {exc}")
-            continue
-        if fresh["repos"]:
-            owners[r.owner] = fresh
-    owners = {o: v for o, v in owners.items() if o in {r.owner for r in cfg.repos}}
-    repos.save_cache(cfg.repos_cache, {"synced": datetime.now(timezone.utc).timestamp(), "owners": owners})
 
 
 def groups(s: Session) -> dict[str, str]:
@@ -170,12 +137,27 @@ async def cmd_init(cfg: Config) -> None:
         await s.close()
 
 
+async def cmd_describe(cfg: Config) -> None:
+    """Publish the current group descriptions and profile text (after they change)."""
+    from unseenet.core.profiles import make_profile
+    s = open_session(cfg)
+    try:
+        for style, gid in groups(s).items():
+            spec = GROUPS[style]
+            await s.update_group(gid, title=spec["title"], description=spec["description"])
+            print(f"updated {gid}")
+        await s.publish_profile(make_profile(about=ABOUT, lang=list(WELCOME), bot=True))
+        print("updated the profile")
+    finally:
+        await s.close()
+
+
 async def publish_profile(s: Session, log=print) -> None:
     if s.data.get("emkay_profile"):
         return
     from unseenet.core.profiles import make_profile
     try:
-        await s.publish_profile(make_profile(about=ABOUT, lang=["en", "da", "de", "sv", "no"], bot=True))
+        await s.publish_profile(make_profile(about=ABOUT, lang=list(WELCOME), bot=True))
     except (SessionError, OSError, ConnectionError) as exc:
         log(f"could not publish the profile yet: {exc}")
         return
@@ -202,12 +184,11 @@ async def publish_face(s: Session, log=print) -> None:
     log("published the profile picture")
 
 
-async def cmd_ask(cfg: Config, question: str, style: str) -> None:
-    ans = await llm.answer(cfg.model, build_index(cfg), World(cfg.wikipedia, cfg.duckduckgo),
-                           question, style=style)
-    print(ans.text)
-    for i, f in enumerate(ans.sources, 1):
-        print(f"[{i}] {f.label} - {f.url}")
+async def cmd_ask(cfg: Config, question: str) -> None:
+    text = bot.strip_name(question, cfg.rules.name)
+    lang = detect_lang(text, cfg.default_lang)
+    said = await cfg.ovos.ask(text, lang, "emkay-cli")
+    print(f"({lang}) " + ("\n".join(said) if said else "(OVOS said nothing)"))
 
 
 async def bot_keys(s: Session, keys: set[str]) -> set[str]:
@@ -222,7 +203,13 @@ async def bot_keys(s: Session, keys: set[str]) -> set[str]:
     return out
 
 
-async def look_once(s: Session, cfg: Config, index: Index, world: World, state: bot.State,
+def session_id(style: str, gid: str, msg) -> str:
+    """One OVOS session per thread (talk) or per group (chat)."""
+    root = msg.thread_root if style == "talk" else gid
+    return "emkay-" + "".join(c if c.isalnum() else "-" for c in f"{style}-{root}")[:120]
+
+
+async def look_once(s: Session, cfg: Config, state: bot.State,
                     dry_run: bool = False, log=print) -> int:
     posted = 0
     me = {s.identity(n).key_text for n in s.data["identities"]}
@@ -244,19 +231,23 @@ async def look_once(s: Session, cfg: Config, index: Index, world: World, state: 
             rules = dataclasses.replace(rules, ignore_keys=rules.ignore_keys | bots)
         for t in bot.select(gid, msgs, style=style, me=me, mine=s.my_message_ids(),
                             rules=rules, state=state, now=now):
-            text = bot.message_of(t.msg)
-            log(f"{style} {t.why}: {t.msg.message_id} {text[:60]!r}")
+            text = bot.strip_name(bot.message_of(t.msg), cfg.rules.name)
+            lang = detect_lang(text, cfg.default_lang)
+            log(f"{style} {t.why} ({lang}): {t.msg.message_id} {text[:60]!r}")
             try:
-                ans = await llm.answer(cfg.model, index, world, text, style=style,
-                                       thread=bot.thread_of(t.msg, msgs),
-                                       author=t.msg.from_name or "", welcome=t.welcome)
-            except (OSError, ValueError, KeyError) as exc:
-                log(f"  the model did not answer: {exc}")
+                said = await cfg.ovos.ask(text, lang, session_id(style, gid, t.msg))
+            except (OSError, ConnectionError) as exc:
+                log(f"  OVOS did not answer: {exc}")
                 break
-            if not ans.text:
+            if not said:
+                log("  OVOS said nothing; staying quiet")
                 state.done(t.msg.message_id)
                 continue
-            r = bot.reply(t.msg, ans, s.group_kinds(gid))
+            answer = ("\n\n" if style == "talk" else "\n").join(said)
+            if t.welcome:
+                hello = WELCOME.get(lang, WELCOME["en"]).format(name=t.msg.from_name or "")
+                answer = f"{hello.replace(' , ', ', ').replace(', !', '!')}\n\n{answer}"
+            r = bot.reply(t.msg, bot.Answer(answer), s.group_kinds(gid))
             if dry_run:
                 log(f"  would post ({r.kind}) {r.subject!r}:\n{r.body}")
             else:
@@ -287,21 +278,14 @@ async def cmd_run(cfg: Config, once: bool, dry_run: bool) -> None:
     state = bot.State.load(cfg.state_file)
     if dry_run:
         state.path = None
-    world = World(cfg.wikipedia, cfg.duckduckgo)
-    await sync_repos(cfg)
-    index, built = build_index(cfg), datetime.now(timezone.utc)
-    print(f"{len(index.chunks)} sections from {', '.join(r.owner for r in cfg.repos) or 'no'} repositories; "
-          f"sitting in {', '.join(groups(s).values())}")
+    print(f"OVOS on {cfg.ovos.host}:{cfg.ovos.port}; sitting in {', '.join(groups(s).values())}")
     try:
         if not dry_run:
             await publish_profile(s)
             await publish_face(s)
         while True:
-            if datetime.now(timezone.utc) - built > timedelta(hours=1):
-                await sync_repos(cfg)
-                index, built = build_index(cfg), datetime.now(timezone.utc)
             try:
-                await look_once(s, cfg, index, world, state, dry_run)
+                await look_once(s, cfg, state, dry_run)
             except (SessionError, OSError, ConnectionError) as exc:
                 print(f"could not read the groups: {exc}")
             if once:
@@ -317,10 +301,9 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("-c", "--config", default="emkay.toml")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("init", help="vault, key, profile and the café groups")
-    a = sub.add_parser("ask", help="ask Emkay one thing, without Unseenet")
+    sub.add_parser("describe", help="publish the current group descriptions and profile text")
+    a = sub.add_parser("ask", help="ask Emkay's OVOS one thing, without Unseenet")
     a.add_argument("question")
-    a.add_argument("--style", choices=("chat", "talk"), default="chat")
-    sub.add_parser("sync", help="fetch the repositories from GitHub now")
     r = sub.add_parser("run", help="sit in the café and talk")
     r.add_argument("--once", action="store_true")
     r.add_argument("--dry-run", action="store_true")
@@ -329,11 +312,10 @@ def main(argv: list[str] | None = None) -> None:
     try:
         if args.cmd == "init":
             asyncio.run(cmd_init(cfg))
+        elif args.cmd == "describe":
+            asyncio.run(cmd_describe(cfg))
         elif args.cmd == "ask":
-            asyncio.run(cmd_ask(cfg, args.question, args.style))
-        elif args.cmd == "sync":
-            asyncio.run(sync_repos(cfg, force=True))
-            print(f"{len(build_index(cfg).chunks)} sections in all")
+            asyncio.run(cmd_ask(cfg, args.question))
         else:
             asyncio.run(cmd_run(cfg, args.once, args.dry_run))
     except KeyboardInterrupt:

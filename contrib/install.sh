@@ -3,9 +3,10 @@
 #
 #   sudo bash install.sh
 #
-# Tor, Ollama and the model, a user `emkay` with a venv, a vault with a random
-# passphrase, the café groups, and Emkay as a systemd service. Running it again
-# updates Emkay and keeps the vault, key and state.
+# Tor; Ollama and the model; OpenVoiceOS with skills and the Emkay persona
+# (install-ovos.sh); a user `emkay` with the Unseenet bridge in a venv, a vault
+# with a random passphrase, the café groups, and systemd services for it all.
+# Running it again updates everything and keeps the vault, key, state and config.
 set -euo pipefail
 
 MODEL="${MODEL:-qwen2.5:7b}"
@@ -40,9 +41,22 @@ WantedBy=multi-user.target
 EOF
   systemctl daemon-reload
 fi
+mkdir -p /etc/systemd/system/ollama.service.d
+printf '[Service]\nEnvironment=OLLAMA_KEEP_ALIVE=-1\n' > /etc/systemd/system/ollama.service.d/emkay.conf
+systemctl daemon-reload
 systemctl enable --now ollama
+systemctl restart ollama
 for i in $(seq 1 30); do ollama list >/dev/null 2>&1 && break; sleep 1; done
 ollama pull "$MODEL"
+# one thread per core: Ollama's own guess counts the host's cores, not the LXC's, and crawls
+printf 'FROM %s\nPARAMETER num_thread %s\nPARAMETER num_ctx 6144\n' "$MODEL" "$(nproc)" > /tmp/Modelfile
+ollama create emkay-qwen -f /tmp/Modelfile >/dev/null
+
+# Emkay's brain: OpenVoiceOS with skills and the Emkay persona
+OVOS_SCRIPT="$(dirname "$0")/install-ovos.sh"
+[ -f "$OVOS_SCRIPT" ] || { OVOS_SCRIPT=/tmp/install-ovos.sh
+  curl -fsSL https://raw.githubusercontent.com/andlo/emkay/main/contrib/install-ovos.sh -o $OVOS_SCRIPT; }
+MODEL=emkay-qwen bash "$OVOS_SCRIPT"
 
 id emkay >/dev/null 2>&1 || useradd -m -s /bin/bash emkay
 sudo -u emkay bash -s <<EOF
@@ -70,31 +84,21 @@ max_per_hour = 30
 max_per_day = 200
 max_per_thread = 6
 
-[github]
-owners = ["unseenet", "OpenVoiceOS"]   # README and description of their public repositories
-docs_repos = ["unseenet/unseenet", "OpenVoiceOS/ovos-technical-manual"]   # every .md file of these
-refresh_hours = 12
-cache_file = "$HOME_DIR/.local/state/emkay/repos.json"
-
-[world]
-wikipedia = true
-duckduckgo = true
-
-[model]
-base_url = "http://127.0.0.1:11434/v1"
-model = "$MODEL"
-timeout = 600
+[ovos]
+host = "127.0.0.1"
+port = 8181
+timeout = 240
+default_lang = "en"
 EOF
   chown emkay:emkay "$CONFIG"
 fi
 
-sudo -u emkay env "$(cat "$ENV_FILE")" $HOME_DIR/.venv/bin/emkay -c "$CONFIG" sync
 sudo -u emkay env "$(cat "$ENV_FILE")" $HOME_DIR/.venv/bin/emkay -c "$CONFIG" init
 
 cat > /etc/systemd/system/emkay.service <<EOF
 [Unit]
 Description=Emkay, the robot café bot
-After=network-online.target ollama.service
+After=network-online.target emkay-ovos-core.service
 Wants=network-online.target
 
 [Service]

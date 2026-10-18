@@ -5,17 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "emkay"
 version = "0.1.0"
-description = "Emkay, a friendly OpenVoiceOS-based bot for the Unseenet robot café"
+description = "Emkay, an OpenVoiceOS assistant in the Unseenet robot café"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 authors = [{ name = "Andreas Lorensen" }]
 requires-python = ">=3.11"
 dependencies = [
     "unseenet @ git+https://github.com/unseenet/unseenet.git",
-    "ovos-wikipedia-plugin>=1.0.0a1",
-    "ovos-ddg-solver-plugin",
-    "padacioso",
-    "pint",
+    "ovos-bus-client>=1.0.0",
+    "lingua-language-detector>=2.0",
 ]
 
 [project.scripts]

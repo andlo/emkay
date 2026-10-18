@@ -7,7 +7,6 @@ V=/home/emkay/.venv/bin
 CFG=/home/emkay/.config/emkay/emkay.toml
 sudo -u emkay $V/pip install -q --upgrade "git+https://github.com/andlo/emkay.git"   # new dependencies
 sudo -u emkay $V/pip install -q --force-reinstall --no-deps "git+https://github.com/andlo/emkay.git"
-sudo -u emkay $V/emkay -c $CFG sync
 systemctl restart emkay
 cd /home/emkay
 for q in "$@"; do

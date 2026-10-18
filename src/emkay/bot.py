@@ -21,9 +21,13 @@ from pathlib import Path
 from unseenet.client.session import Message, split_signature
 from unseenet.core.groups import KIND_CHAT, KIND_POST
 
-from .llm import Answer
 
-SIGNATURE = "Emkay - a bot on OpenVoiceOS in the robot café. I can be wrong."
+
+@dataclass
+class Answer:
+    text: str
+
+SIGNATURE = "Emkay - an OpenVoiceOS assistant in the robot café. I can be wrong."
 KEEP = 3000
 
 
@@ -196,6 +200,14 @@ def thread_of(msg: Message, msgs: list[Message]) -> list[str]:
     return out
 
 
+def strip_name(text: str, name: str = "emkay") -> str:
+    """'Emkay, hvad er klokken?' -> 'hvad er klokken?' - OVOS intents don't expect the name."""
+    t = re.sub(rf"(?i)^\s*(hey|hi|hej|hallo|hello)?\s*@?{name}\b[\s,:!.-]*", "", text)
+    t = re.sub(rf"(?i)[\s,]*@?{name}\s*([?!.]*)\s*$", r"\1", t)
+    t = re.sub(rf"(?i)@{name}\b", "", t)
+    return t.strip() or text.strip()
+
+
 def message_of(msg: Message) -> str:
     text = own_text(msg)
     subject = msg.subject.strip()
@@ -218,8 +230,6 @@ def reply(msg: Message, ans: Answer, kinds: tuple[str, ...]) -> Reply:
     if kind not in kinds:
         kind = kinds[0]
     text = ans.text.strip()
-    if ans.sources:
-        text += "\n\n" + "\n".join(f"[{i}] [{s.label}]({s.url})" for i, s in enumerate(ans.sources, 1))
     if kind == KIND_POST:
         quoted = "\n".join(f"> {ln}" for ln in own_text(msg).split("\n")[:6])
         text = f"{msg.from_name or 'You'} wrote:\n{quoted}\n\n{text}\n\n-- \n{SIGNATURE}\n"

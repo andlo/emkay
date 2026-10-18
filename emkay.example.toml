@@ -14,17 +14,9 @@ max_per_hour = 30
 max_per_day = 200
 max_per_thread = 6
 
-[github]
-owners = ["unseenet", "OpenVoiceOS"]   # README and description of their public repositories
-docs_repos = ["unseenet/unseenet", "OpenVoiceOS/ovos-technical-manual"]   # every .md file of these
-refresh_hours = 12
-cache_file = "~/.local/state/emkay/repos.json"
-
-[world]
-wikipedia = true                 # ovos-wikipedia-plugin
-duckduckgo = true                # ovos-ddg-solver-plugin
-
-[model]
-base_url = "http://127.0.0.1:11434/v1"
-model = "qwen2.5:7b"
-timeout = 600
+[ovos]
+# Emkay's brain: an OpenVoiceOS messagebus (see contrib/install-ovos.sh)
+host = "127.0.0.1"
+port = 8181
+timeout = 240                    # seconds; the LLM fallback on a CPU can be slow
+default_lang = "en"              # when a message's language can't be told
