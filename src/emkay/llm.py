@@ -156,7 +156,9 @@ async def answer(model: Model, index: Index, world: World, message: str, *, styl
                                  {"role": "user", "content": f"{context}{hello}{who}:\n{message[:3000]}"}],
                                 350 if style == "chat" else 700)
     text = re.sub(r"^\s*Emkay\s*:\s*", "", text).strip()
-    cited = sorted({int(n) for n in re.findall(r"\[(\d+)\]", text) if 0 < int(n) <= len(facts)})
+    # only sources with a link are listed; a tool's exact result (calculator, clock) needs none
+    cited = sorted({int(n) for n in re.findall(r"\[(\d+)\]", text)
+                    if 0 < int(n) <= len(facts) and facts[int(n) - 1].url})
     renumber = {old: new for new, old in enumerate(cited, 1)}
     text = re.sub(r"\s?\[(\d+)\]", lambda m: f" [{renumber[int(m.group(1))]}]"
                   if int(m.group(1)) in renumber else "", text)
