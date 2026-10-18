@@ -84,8 +84,9 @@ class Ovos:
                 return (m.context.get("session") or {}).get("session_id") == session_id
 
             def on_speak(m):
-                if mine(m) and m.data.get("utterance"):
-                    said.append(m.data["utterance"].strip())
+                text = (m.data.get("utterance") or "").strip()
+                if mine(m) and text and text not in said:
+                    said.append(text)
 
             def on_done(m):
                 if mine(m):

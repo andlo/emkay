@@ -9,10 +9,9 @@
 # ovos-solver-openai-plugin. Running it again updates OVOS and keeps the config.
 set -euo pipefail
 
-# ovos-releases constraints: stable, testing or alpha. Alpha: ovos-core 2.1 (testing)
-# can load a slow skill twice at start-up (no lock around load_plugin_skills), so
-# it answers twice; newer cores have the lock.
-CHANNEL="${CHANNEL:-alpha}"
+# ovos-releases constraints: stable, testing or alpha. Testing is what most OVOS
+# users run; see UPSTREAM.md for what alpha currently breaks.
+CHANNEL="${CHANNEL:-testing}"
 MODEL="${MODEL:-emkay-qwen}"
 HOME_DIR=/home/emkay
 VENV=$HOME_DIR/ovos
@@ -27,7 +26,7 @@ SKILLS=(
 )
 PLUGINS=(
   "ovos-core[plugins,lgpl]" ovos-messagebus ovos-persona ovos-openai-plugin
-  ovos-ddg-plugin ovos-wikipedia-plugin ovos-solver-failure-plugin
+  ovos-ddg-solver-plugin ovos-wikipedia-plugin ovos-solver-failure-plugin
 )
 
 apt-get install -y -qq python3-venv python3-dev build-essential swig libfann-dev git >/dev/null
@@ -96,9 +95,16 @@ if [ ! -f "$PERSONA" ]; then
 EOF
 fi
 
+# ovos-core 2.1 (testing) can load a slow skill twice at start-up, and then both
+# copies answer; ovos-core-locked.py backports the lock newer cores have
+LOCKED="$(dirname "$0")/ovos-core-locked.py"
+[ -f "$LOCKED" ] || { LOCKED=/tmp/ovos-core-locked.py
+  curl -fsSL https://raw.githubusercontent.com/andlo/emkay/main/contrib/ovos-core-locked.py -o $LOCKED; }
+install -o emkay -m 644 "$LOCKED" $VENV/ovos-core-locked.py
+
 # --- services -------------------------------------------------------------------
 for svc in messagebus core; do
-  bin=$([ $svc = messagebus ] && echo ovos-messagebus || echo ovos-core)
+  bin=$([ $svc = messagebus ] && echo "$VENV/bin/ovos-messagebus" || echo "$VENV/bin/python $VENV/ovos-core-locked.py")
   cat > /etc/systemd/system/emkay-ovos-$svc.service <<EOF
 [Unit]
 Description=Emkay's OpenVoiceOS $svc
@@ -108,7 +114,7 @@ $([ $svc = core ] && echo "Requires=emkay-ovos-messagebus.service")
 [Service]
 User=emkay
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$VENV/bin/$bin
+ExecStart=$bin
 Restart=on-failure
 RestartSec=10
 
