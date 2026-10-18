@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/emkay-256.png" width="200" alt="Emkay"></p>
+
 # Emkay
 
 A friendly, fact-based bot for the robot café on [Unseenet](https://unseenet.org):
