@@ -28,11 +28,30 @@ from . import bot
 from .ovos import Ovos, detect_lang
 
 PASS_ENV = "UNSEENET_VAULT_PASSPHRASE"
-ABOUT = ("I'm Emkay - \"MK\" said out loud, a nod to Mycroft's Mark I and Mark II. A friendly, "
-         "fact-based OpenVoiceOS (OVOS) assistant living in alt.robot.cafe.chat and "
-         "alt.robot.cafe.talk: OVOS skills answer what they can, and a small local language "
-         "model the rest. A private hobby project by andlo, not affiliated with the "
-         "OpenVoiceOS project or Mycroft AI. I can be wrong.")
+ABOUT = """\
+# Emkay :robot:
+
+Hi, I'm Emkay - a friendly robot who hangs out in the **robot café**.
+Come and say hi:
+
+- [alt.robot.cafe.chat](unseenet:join?g=alt.robot.cafe.chat@w2ie6skhfxk4qprt) -
+  just chat with me
+- [alt.robot.cafe.talk](unseenet:join?g=alt.robot.cafe.talk@w2ie6skhfxk4qprt) -
+  longer discussions, one post at a time
+
+## About me
+
+- I run on [OpenVoiceOS](https://openvoiceos.org), the open source voice assistant
+- I look things up on Wikipedia and the web, and I learn new skills along the way
+- Name me ("Emkay, ..." or `@emkay`) and I answer right away
+- My name is "MK" - a nod to the old Mycroft Mark I and Mark II robots
+
+I am a robot, so I can be wrong. A hobby project by
+[Andreas](unseenet:b4xkhrco5yii4dw7) - [my code on GitHub](https://github.com/andlo/emkay).
+Not affiliated with the OpenVoiceOS project or Mycroft AI.
+"""   # his public profile, Markdown (UN-RFC 0022 section 4.1)
+PROFILE_LINKS = [{"kind": "github", "value": "https://github.com/andlo/emkay"},
+                 {"kind": "web", "value": "https://openvoiceos.org"}]
 BLURB = ("Emkay is a bot and joins conversations freely; humans are welcome to talk with each "
          "other too. Emkay is an OpenVoiceOS (OVOS) assistant. The name is \"MK\" said out loud, "
          "a nod to Mycroft's Mark I and Mark II, the open source voice assistants whose work OVOS "
@@ -140,31 +159,47 @@ async def cmd_init(cfg: Config) -> None:
 
 async def cmd_describe(cfg: Config) -> None:
     """Publish the current group descriptions and profile text (after they change)."""
-    from unseenet.core.profiles import make_profile
     s = open_session(cfg)
     try:
         for style, gid in groups(s).items():
             spec = GROUPS[style]
             await s.update_group(gid, title=spec["title"], description=spec["description"])
             print(f"updated {gid}")
-        await s.publish_profile(make_profile(about=ABOUT, lang=PROFILE_LANGS, bot=True))
+        await s.publish_profile(profile())
+        s.data["emkay_profile"] = profile_mark()
+        s.save()
         print("updated the profile")
     finally:
         await s.close()
 
 
-async def publish_profile(s: Session, log=print) -> None:
-    if s.data.get("emkay_profile"):
-        return
+def profile() -> dict:
+    """His public profile: the bot mark, Markdown About text, links and languages."""
     from unseenet.core.profiles import make_profile
+    return make_profile(about=ABOUT, links=PROFILE_LINKS, lang=PROFILE_LANGS,
+                        bot=True, markdown=True)
+
+
+def profile_mark() -> str:
+    """A short hash of the profile, kept in the vault: a changed text is published again."""
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps(profile(), sort_keys=True).encode()).hexdigest()[:16]
+
+
+async def publish_profile(s: Session, log=print) -> None:
+    """At start: publish the profile when it is new or its text has changed."""
+    first = not s.data.get("emkay_profile")
+    if s.data.get("emkay_profile") == profile_mark():
+        return
     try:
-        await s.publish_profile(make_profile(about=ABOUT, lang=PROFILE_LANGS, bot=True))
+        await s.publish_profile(profile())
     except (SessionError, OSError, ConnectionError) as exc:
         log(f"could not publish the profile yet: {exc}")
         return
-    s.data["emkay_profile"] = True
+    s.data["emkay_profile"] = profile_mark()
     s.save()
-    log("published the profile with the bot mark")
+    log("published the profile with the bot mark" if first else "published the changed profile")
     await publish_face(s, log)
 
 
