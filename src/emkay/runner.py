@@ -60,10 +60,10 @@ BLURB = ("Emkay is a bot and joins conversations freely; humans are welcome to t
 GROUPS = {
     "chat": dict(name="alt.robot.cafe.chat", title="Robot café: chat",
                  description="Quick chat with Emkay, a friendly, fact-based assistant bot.\n\n" + BLURB,
-                 view="chat", kinds=["chat"]),
+                 view="chat", kinds=["chat"], languages=["en", "da"]),
     "talk": dict(name="alt.robot.cafe.talk", title="Robot café: talk",
                  description="Longer discussions, Usenet style. Emkay quotes what he answers.\n\n" + BLURB,
-                 view="threads", kinds=["post"]),
+                 view="threads", kinds=["post"], languages=["en", "da"]),
 }
 PROFILE_LANGS = ["en", "da", "de", "sv", "nb", "nl", "fr", "es"]   # a profile lists at most 8
 WELCOME = {
@@ -142,7 +142,7 @@ async def cmd_init(cfg: Config) -> None:
                 continue
             gid = await s.create_group(spec["name"], "open", title=spec["title"],
                                        description=spec["description"], view=spec["view"],
-                                       kinds=spec["kinds"])
+                                       kinds=spec["kinds"], extra={"languages": spec["languages"]})
             mine[style] = gid
             s.data["emkay_groups"] = mine
             s.save()
@@ -163,7 +163,8 @@ async def cmd_describe(cfg: Config) -> None:
     try:
         for style, gid in groups(s).items():
             spec = GROUPS[style]
-            await s.update_group(gid, title=spec["title"], description=spec["description"])
+            await s.update_group(gid, title=spec["title"], description=spec["description"],
+                                 languages=spec["languages"])       # UN-RFC 0052 5a
             print(f"updated {gid}")
         await s.publish_profile(profile())
         s.data["emkay_profile"] = profile_mark()
@@ -171,6 +172,12 @@ async def cmd_describe(cfg: Config) -> None:
         print("updated the profile")
     finally:
         await s.close()
+
+
+def header_lang(lang: str) -> str:
+    """The code for the Content-Language header: Norwegian Bokmål as ``no``, as the
+    clients' list of languages has it; the others as they are."""
+    return "no" if lang == "nb" else lang
 
 
 def profile() -> dict:
@@ -292,7 +299,9 @@ async def look_once(s: Session, cfg: Config, state: bot.State,
                 log(f"  would post ({r.kind}) {r.subject!r}:\n{r.body}")
             else:
                 try:
-                    msgid = await s.post(gid, r.subject, r.body, references=r.references, kind=r.kind)
+                    # what he answers in, as his post's Content-Language (UN-RFC 0052 5a)
+                    msgid = await s.post(gid, r.subject, r.body, references=r.references, kind=r.kind,
+                                         languages=[header_lang(lang)])
                 except (SessionError, OSError, ConnectionError) as exc:
                     log(f"  could not post: {exc}")
                     break
