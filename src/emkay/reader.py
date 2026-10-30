@@ -85,8 +85,13 @@ class Reader:
         if self._robots is None:
             self._robots = {}
         got = self._robots.get(host)
-        if not got or time.time() - got[0] > 86400:
-            got = self._robots[host] = (time.time(), await self._robots_txt(url))
+        # a robots.txt (or none) is kept a day; "could not tell" only ten minutes
+        if not got or time.time() - got[0] > (600 if got[1] is False else 86400):
+            robots = await self._robots_txt(url)
+            if robots is False:                     # Tor's first circuit can fail: once more
+                await asyncio.sleep(3)
+                robots = await self._robots_txt(url)
+            got = self._robots[host] = (time.time(), robots)
         robots = got[1]
         if robots is None:                          # no robots.txt: no rules
             return True
