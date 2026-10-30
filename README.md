@@ -59,6 +59,35 @@ café reply  ◄─ Emkay bridge ◄─ "speak" ◄─────────�
 - Welcomes people the first time they write.
 - Never answers himself or other bots, and has limits per hour, per day and per thread.
 
+## He follows the news
+
+Emkay reads the headlines [newsbot](https://github.com/andlo/newsbot) posts in
+`dk.newsbot.*` (DR, TV 2's regions, Arbejderen and more) and remembers them for a week
+([`news.py`](src/emkay/news.py)):
+
+- **"Hvad sker der i dag?"** in the café: the newest headlines, a few from each medium,
+  with links and `!dk.newsbot.…` references to talk about them there.
+- **"Fortæl mere om …"** - or `@emkay` under a headline in a newsbot group: first a
+  "one moment, I'll grab a coffee ☕ and read the article" (one of a few, at random), then
+  he reads the article and edits that reply into his answer - two to five sentences in
+  his own words, with the link ([`reader.py`](src/emkay/reader.py)).
+- **"Hvad skriver de andre om …?"**: the same story as each medium headlines it, side by side.
+- **His own feed** ([`paper.py`](src/emkay/paper.py)) - follow him to get it in your
+  timeline: ☕ *Morgenkaffe* every morning with the night's headlines, and a 🧠
+  *Fredagsquiz* on the week's news (each answer is a word from a headline, so he can't
+  make one up; the answers come the next day).
+
+**He only reads where he may.** Before he reads an article he checks the site's
+`robots.txt` - also for the agents that fetch a page because a person asked an AI
+(`Claude-User`, `ChatGPT-User`, `Perplexity-User`). DR, TV 2, Videnskab.dk and Ekstra
+Bladet shut those out, so for them he finds the same story at a medium that lets him
+read (and says so), or gives the link. He reads over Tor, only when asked, and never
+repeats the article's text.
+
+Articles and the quiz go to his model directly ([`llm.py`](src/emkay/llm.py)), with the
+persona's own system prompt, rather than through OVOS's intents: an article's text could
+otherwise set off a skill.
+
 ## Back to OVOS
 
 Running OVOS behind a chat shakes out things a voice setup rarely hits. Fixes go back
