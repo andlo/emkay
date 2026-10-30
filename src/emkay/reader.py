@@ -24,7 +24,7 @@ from .llm import Llm
 log = logging.getLogger("emkay.reader")
 
 AGENTS = ("Emkay", "Claude-User", "ChatGPT-User", "Perplexity-User", "anthropic-ai")
-ARTICLE_CHARS = 7000            # what fits his model's context next to the prompt
+ARTICLE_CHARS = 4500            # his model reads ~12 tokens a second on the CPU: ~1.5 min
 PAGE_OCTETS = 3 * 1024 * 1024
 LANG_NAME = {"da": "Danish", "en": "English", "de": "German", "sv": "Swedish",
              "nb": "Norwegian", "nl": "Dutch", "fr": "French", "es": "Spanish",
