@@ -20,3 +20,34 @@ host = "127.0.0.1"
 port = 8181
 timeout = 240                    # seconds; the LLM fallback on a CPU can be slow
 default_lang = "en"              # when a message's language can't be told
+
+[news]
+# The news Emkay follows (news.py): newsbot's groups. He remembers their headlines for a
+# week, answers "@emkay" under a headline by reading the article (when the site's
+# robots.txt lets AI agents read), and knows "hvad sker der i dag?" in the café.
+# Leave out to turn it all off.
+groups = [
+  "dk.newsbot.dr@b4xkhrco5yii4dw7", "dk.newsbot.arbejderen@b4xkhrco5yii4dw7",
+  "dk.newsbot.videnskab@b4xkhrco5yii4dw7", "dk.newsbot.avisen@b4xkhrco5yii4dw7",
+  "dk.newsbot.solidaritet@b4xkhrco5yii4dw7", "dk.newsbot.denkorteavis@b4xkhrco5yii4dw7",
+  "dk.newsbot.ekstrabladet@b4xkhrco5yii4dw7", "dk.newsbot.bt@b4xkhrco5yii4dw7",
+  "dk.newsbot.tv2.kosmopol@b4xkhrco5yii4dw7", "dk.newsbot.tv2.ost@b4xkhrco5yii4dw7",
+  "dk.newsbot.tv2.fyn@b4xkhrco5yii4dw7", "dk.newsbot.tv2.syd@b4xkhrco5yii4dw7",
+  "dk.newsbot.tv2.ostjylland@b4xkhrco5yii4dw7", "dk.newsbot.tv2.midtvest@b4xkhrco5yii4dw7",
+  "dk.newsbot.tv2.nord@b4xkhrco5yii4dw7", "dk.newsbot.tv2.bornholm@b4xkhrco5yii4dw7",
+]
+file = "~/.local/state/emkay/news.json"
+
+[llm]
+# His own model, asked directly for articles and the quiz (llm.py) - the persona's model
+url = "http://127.0.0.1:11434/v1"
+model = "emkay-qwen"
+timeout = 300
+
+[paper]
+# His feed (paper.py): the morning coffee paper and the Friday quiz
+enabled = true
+tz = "Europe/Copenhagen"
+morning = "07:30"
+quiz_day = "fri"
+quiz_time = "15:00"

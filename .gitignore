@@ -3,3 +3,4 @@ __pycache__/
 emkay.toml
 *.vault
 _shots/
+.venv/
